@@ -36,5 +36,5 @@ cmake --build build --config Release --target llama-server -j"$(nproc)" || { ech
 echo "BUILD_OK $(date +%T)"
 if pgrep -f "[l]lama-server|[l]lama-bench|[s]erver_ab|[b]ench_ab" >/dev/null; then echo "GPU_BUSY"; exit 1; fi
 cd /tmp
-NEW_ROOT=$W TAGS=new ROUNDS=1 python3 /tmp/server_ab.py "/tmp/srvbisect_${C}_$(date +%Y%m%d_%H%M%S)"
+NEW_ROOT=$W TAGS=${TAGS:-new} ROUNDS=${ROUNDS:-1} python3 /tmp/server_ab.py "/tmp/srvbisect_${C}_$(date +%Y%m%d_%H%M%S)"
 echo "STEP_DONE $(date +%T)"

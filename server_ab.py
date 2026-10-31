@@ -16,10 +16,13 @@ REPS = 3
 SPEC_N = os.environ.get("SPEC_N", "2")
 LZM = os.environ.get("LZM", "on-direct")
 TAGS = os.environ.get("TAGS", "base,new").split(",")
+# WRAP: command prefix for the server, {tag}/{rnd} expanded (e.g. rocprofv3 ... -d /tmp/prof_{tag} --); ONLY: comma list of prompts, skips image
+WRAP = os.environ.get("WRAP", "")
+ONLY = [p for p in os.environ.get("ONLY", "").split(",") if p]
 
 
-def server_cmd(root):
-    return [
+def server_cmd(root, tag="", rnd=0):
+    return WRAP.format(tag=tag, rnd=rnd).split() + [
         f"{root}/build/bin/llama-server", "-m", MODEL, "--ctx-size", "131072", "--port", str(PORT),
         "--jinja", "--metrics", "--mmproj", MMPROJ, "--model-draft", DRAFT,
         "--chat-template-file", "/home/lemonade/chat_template.jinja",
@@ -54,7 +57,7 @@ FILLER = ("The quick brown fox jumps over the lazy dog. Pack my box with five do
 PROMPTS = {
     "code": "Write a Python function that merges overlapping intervals and explain its complexity.",
     "chat": "Explain in three short paragraphs why the sky is blue.",
-    "long32k": FILLER * 1600 + "\nQuestion: summarize the repeated text above in one sentence.\nAnswer:",
+    "long32k": FILLER * int(os.environ.get("LONG_N", "1600")) + "\nQuestion: summarize the repeated text above in one sentence.\nAnswer:",
 }
 
 
@@ -91,7 +94,7 @@ def run_build(tag, rnd):
     root = BUILDS[tag]
     log = open(f"{OUT}/{tag}_r{rnd}.server.log", "w")
     env = dict(os.environ, LD_LIBRARY_PATH=f"{root}/build/bin")
-    proc = subprocess.Popen(server_cmd(root), stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env)
+    proc = subprocess.Popen(server_cmd(root, tag, rnd), stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env)
     res = {"tag": tag, "round": rnd, "ok": False}
     try:
         t0 = time.time()
@@ -112,9 +115,14 @@ def run_build(tag, rnd):
         completion("Hello", 16)  # warmup
         res["tests"] = {}
         for name, p in PROMPTS.items():
+            if ONLY and name not in ONLY:
+                continue
             res["tests"][name] = [completion(p) for _ in range(REPS)]
             hashes = {x["sha256"] for x in res["tests"][name]}
             res["tests"][name + "_deterministic"] = len(hashes) == 1
+        if ONLY:
+            res["ok"] = True
+            return res
         img = base64.b64encode(png_solid(64, 64, (255, 0, 0))).decode()
         r = json.loads(http("/v1/chat/completions", {
             "messages": [{"role": "user", "content": [
